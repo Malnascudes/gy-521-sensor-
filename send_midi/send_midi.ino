@@ -49,12 +49,12 @@ uint8_t fifoBuffer[64]; // FIFO storage buffer
 int variable_note [6]= {10,11,12,13,14,15}; //para guardar la nota por la que se manda el valor de cada variable
                   //[acX, acY, acZ, yawn, pitch, roll]
 //ofset del sensor que se obtiene con el script calibracion.ino
-int ofsetacelX = 2091;
-int ofsetacelY = 16;
-int ofsetacelZ = 582;
-int ofsetgiroX = 28;
-int ofsetgiroY = 1;
-int ofsetgiroZ = -31;
+int ofsetacelX = 1863;
+int ofsetacelY = 107;
+int ofsetacelZ = 581;
+int ofsetgiroX = 42;
+int ofsetgiroY = 2;
+int ofsetgiroZ = -30;
 //bolean para imprimir o no las variables
 bool print_data = false;
 //-------------------------------------------------------------------------
