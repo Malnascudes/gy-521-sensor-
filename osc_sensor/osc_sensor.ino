@@ -14,7 +14,7 @@
 #include <WiFi.h>
 #endif
 #include <WiFiUdp.h>
-#include <OSCMessage.h>
+#include <OSCBundle.h>
 #include "Wire.h" // This library allows you to communicate with I2C devices.
 
 char tmp_str[7]; // temporary variable used in convert function
@@ -100,52 +100,24 @@ struct SensorDataStruct read_sensor_data(int mpu_addr) {
   return sensor_data;
 }
 
-void send_sensor_osc_message(char* route, SensorDataStruct sensor_data){
-    char** complete_route = "/" + route + "/acc_x";
-    OSCMessage msg("/test1");
-    msg.add(sensor_data.accelerometer_x);
-    Udp.beginPacket(outIp, outPort);
-    msg.send(Udp);
-    Udp.endPacket();
-    msg.empty();
+void send_sensor_osc_message(String route, SensorDataStruct sensor_data){
+    String complete_route = "/" + route + "/acc_x";
 
-    complete_route = "/" + route + "/acc_y";
-    msg.setAddress("/test2");
-    msg.add(sensor_data.accelerometer_y);
-    Udp.beginPacket(outIp, outPort);
-    msg.send(Udp);
-    Udp.endPacket();
-    msg.empty();
+    //declare the bundle /// https://github.com/CNMAT/OSC/blob/master/examples/UDPSendBundle/UDPSendBundle.ino
+    OSCBundle message_bundle;
 
-    complete_route = "/" + route + "/acc_z";
-    msg.setAddress("/test3");
-    msg.add(sensor_data.accelerometer_z);
-    Udp.beginPacket(outIp, outPort);
-    msg.send(Udp);
-    Udp.endPacket();
-    msg.empty();
+    //BOSCBundle's add' returns the OSCMessage so the message's 'add' can be composed together
+    message_bundle.add("/acc/x").add(sensor_data.accelerometer_x);
+    message_bundle.add("/acc/y").add(sensor_data.accelerometer_y);
+    message_bundle.add("/acc/z").add(sensor_data.accelerometer_z);
+    message_bundle.add("/gyr/x").add(sensor_data.gyro_x);
+    message_bundle.add("/gyr/y").add(sensor_data.gyro_y);
+    message_bundle.add("/gyr/z").add(sensor_data.gyro_z);
 
-    complete_route = "/" + route + "/gyro_x";
-    msg.setAddress("/test4");
-    msg.add(sensor_data.gyro_x);
-    Udp.beginPacket(outIp, outPort);
-    msg.send(Udp);
-    Udp.endPacket();
-    msg.empty();
 
-    complete_route = "/" + route + "/gyro_y";
-    msg.setAddress("/test5");
-    msg.add(sensor_data.gyro_y);
     Udp.beginPacket(outIp, outPort);
-    msg.send(Udp);
-    Udp.endPacket();
-    msg.empty();
-
-    complete_route = "/" + route + "/gyro_z";
-    msg.setAddress(&complete_route);
-    msg.add(sensor_data.gyro_z);
-    Udp.beginPacket(outIp, outPort);
-    msg.send(Udp);
-    Udp.endPacket();
-    msg.empty();
+    message_bundle.send(Udp); // send the bytes to the SLIP stream
+    Udp.endPacket(); // mark the end of the OSC Packet
+    message_bundle.empty(); // empty the bundle to free room for a new one
+   
 }
