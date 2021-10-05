@@ -100,8 +100,8 @@ struct SensorDataStruct read_sensor_data(int mpu_addr) {
   return sensor_data;
 }
 
-void send_sensor_osc_message(String route, SensorDataStruct sensor_data){
-    String complete_route = "/" + route + "/acc_x";
+void send_sensor_osc_message(char* route, SensorDataStruct sensor_data){
+    char** complete_route = "/" + route + "/acc_x";
     OSCMessage msg("/test1");
     msg.add(sensor_data.accelerometer_x);
     Udp.beginPacket(outIp, outPort);
@@ -142,7 +142,7 @@ void send_sensor_osc_message(String route, SensorDataStruct sensor_data){
     msg.empty();
 
     complete_route = "/" + route + "/gyro_z";
-    msg.setAddress("/test6");
+    msg.setAddress(&complete_route);
     msg.add(sensor_data.gyro_z);
     Udp.beginPacket(outIp, outPort);
     msg.send(Udp);
