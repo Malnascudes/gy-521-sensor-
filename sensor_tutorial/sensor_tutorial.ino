@@ -43,17 +43,9 @@ char ssid[] = "Koi";          // your network SSID (name)
 char pass[] = "199119931994";                    // your network password
 
 WiFiUDP Udp;                                // A UDP instance to let us send and receive packets over UDP
-const IPAddress outIp(192,168,1,108);        // remote IP of your computer
+const IPAddress outIp(37,133,215,12);        // remote IP of your computer
 const unsigned int outPort = 8000;          // remote port to receive OSC
 const unsigned int localPort = 8888;        // local port to listen for OSC packets (actually not used for sending)
-
-char tmp_str[7]; // temporary variable used in convert function
-char* convert_int16_to_str(float f) { // converts int16 to string. Moreover, resulting strings will have the same length in the debug monitor.
-  sprintf(tmp_str, "%6f", f);
-  return tmp_str;
-}
-
-
 
 bool checkI2c(byte addr);
 void mpu6050Begin(byte addr);
@@ -97,7 +89,7 @@ void mpu6050Begin(byte addr){
         
         delay(30); // Ensure gyro has enough time to power up
 
-        calibrateMPU6050(addr, offsets, 'X', 50, true);
+        // calibrateMPU6050(addr, offsets, 'X', 50, true);
     }
 }
  
