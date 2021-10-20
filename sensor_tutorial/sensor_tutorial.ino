@@ -58,9 +58,31 @@ void calibrateMPU6050(byte addr, rawdata &offsets,char up_axis, int num_samples,
 rawdata averageSamples(rawdata * samps,int len);
 
 void setup() {
-    Wire.begin();
     Serial.begin(115200);
 
+    // Connect to WiFi network
+    Serial.println();
+    Serial.println();
+    Serial.print("Connecting to ");
+    Serial.println(ssid);
+    WiFi.begin(ssid, pass);
+
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println("");
+
+    Serial.println("WiFi connected");
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
+
+    Serial.println("Starting UDP");
+    Udp.begin(localPort);
+    Serial.print("Local port: ");
+    Serial.println(localPort);
+
+    Wire.begin();
     mpu6050Begin(MPU_addr);
 }
  
@@ -364,6 +386,13 @@ void send_sensor_osc_message(scaleddata sensor_data){
     message_bundle.add("/gyr/y").add(sensor_data.GyY);
     message_bundle.add("/gyr/z").add(sensor_data.GyZ);
 
+    Serial.print(" SGyX = "); Serial.print((int32_t)sensor_data.GyX);
+    Serial.print(" °/s| SGyY = "); Serial.print((int32_t)sensor_data.GyY);
+    Serial.print(" °/s| SGyZ = "); Serial.print((int32_t)sensor_data.GyZ);
+    Serial.print(" °/s| STmp = "); Serial.print((int32_t)sensor_data.Tmp);
+    Serial.print(" °C| SAcX = "); Serial.print((int32_t)sensor_data.AcX);
+    Serial.print(" g| SAcY = "); Serial.print((int32_t)sensor_data.AcY);
+    Serial.print(" g| SAcZ = "); Serial.print((int32_t)sensor_data.AcZ);Serial.println(" g");
 
     Udp.beginPacket(outIp, outPort);
     message_bundle.send(Udp); // send the bytes to the SLIP stream
