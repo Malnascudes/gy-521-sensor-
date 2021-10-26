@@ -7,7 +7,8 @@
 #include <OSCBundle.h>
 #include "Wire.h" // This library allows you to communicate with I2C devices.
 
-const uint8_t MPU_addr=0x68; // I2C address of the MPU-6050
+const uint8_t sensor_1_MPU_addr=0x68; // I2C address of the MPU-6050
+const uint8_t sensor_2_MPU_addr=0x69; // I2C address of the MPU-6050
  
 const float MPU_GYRO_250_SCALE = 131.0;
 const float MPU_GYRO_500_SCALE = 65.5;
@@ -38,10 +39,10 @@ struct scaleddata {
     float GyZ;
 };
 
-struct angledata {
-    float x;
-    float y;
-    float z;
+struct ypr {
+    float yawn;
+    float pitch;
+    float roll;
 };
 
 char ssid[] = "Koi";          // your network SSID (name)
@@ -49,8 +50,13 @@ char pass[] = "199119931994";                    // your network password
 
 WiFiUDP Udp;                                // A UDP instance to let us send and receive packets over UDP
 const IPAddress outIp(192,168,1,108);        // remote IP of your computer
-const unsigned int outPort = 8000;          // remote port to receive OSC
+const unsigned int sensor_1_outPort = 8000;          // remote port to receive OSC
+const unsigned int sensor_2_outPort = 8001;          // remote port to receive OSC
 const unsigned int localPort = 8888;        // local port to listen for OSC packets (actually not used for sending)
+ypr ypr_prev = {0.0,0.0,0.0};
+float dt = 0.01;//segons
+//filter alpha
+const float alpha = 0.5;
 
 bool checkI2c(byte addr);
 void mpu6050Begin(byte addr);
@@ -88,22 +94,27 @@ void setup() {
     Serial.println(localPort);
 
     Wire.begin();
-    mpu6050Begin(MPU_addr);
+    mpu6050Begin(sensor_1_MPU_addr);
+    mpu6050Begin(sensor_2_MPU_addr);
 }
  
 void loop() {
+    read_and_send_sensor_data(sensor_1_MPU_addr, sensor_1_outPort, true);
+    read_and_send_sensor_data(sensor_2_MPU_addr, sensor_2_outPort, true);
+    delay(dt*1000);
+}
+
+void read_and_send_sensor_data(uint8_t mpu_adress , unsigned int out_port, bool Debug){
     rawdata sensor_raw_data;
     scaleddata sensor_data;
-    angledata angles;
+    ypr ypr_data;
 
-    setMPU6050scales(MPU_addr,0b00000000,0b00010000);
+    setMPU6050scales(mpu_adress,0b00000000,0b00010000);
 
-    sensor_raw_data = mpu6050Read(MPU_addr, false);
-    sensor_data = convertRawToScaled(MPU_addr, sensor_raw_data, false);
-    angles = acceleration_to_axis_angles(sensor_data.AcX, sensor_data.AcY, sensor_data.AcZ);
-    send_sensor_osc_message(sensor_data, angles);
-
-    delay(10);
+    sensor_raw_data = mpu6050Read(mpu_adress, Debug);
+    sensor_data = convertRawToScaled(mpu_adress, sensor_raw_data, Debug);
+    ypr_data = compute_yawn_pitch_roll(sensor_data);
+    send_sensor_osc_message(out_port, sensor_data, ypr_data);
 }
 
 void mpu6050Begin(byte addr){
@@ -111,7 +122,7 @@ void mpu6050Begin(byte addr){
     // It verifys the address is correct and wakes up the
     // MPU.
     if (checkI2c(addr)){
-        Wire.beginTransmission(MPU_addr);
+        Wire.beginTransmission(addr);
         Wire.write(0x6B); // PWR_MGMT_1 register
         Wire.write(0); // set to zero (wakes up the MPU-6050)
         Wire.endTransmission(true);
@@ -164,7 +175,7 @@ scaleddata convertRawToScaled(byte addr, rawdata data_in, bool Debug){
     float scale_value = 0.0;
     byte Gyro, Accl;
     
-    getMPU6050scales(MPU_addr, Gyro, Accl);
+    getMPU6050scales(addr, Gyro, Accl);
     
     // if(Debug){
     // Serial.print("Gyro Full-Scale = ");
@@ -307,7 +318,7 @@ void calibrateMPU6050(byte addr,rawdata &offsets,char up_axis ,int num_samples, 
     }
 
     offsets = averageSamples(temp,num_samples);
-    getMPU6050scales(MPU_addr, Gyro, Accl);
+    getMPU6050scales(addr, Gyro, Accl);
 
     switch (Accl){
         case 0:
@@ -380,7 +391,7 @@ rawdata averageSamples(rawdata * samps,int len){
  
 }
 
-void send_sensor_osc_message(scaleddata sensor_data, angledata angles){
+void send_sensor_osc_message(unsigned int out_port, scaleddata sensor_data, ypr ypr_data){
     //declare the bundle /// https://github.com/CNMAT/OSC/blob/master/examples/UDPSendBundle/UDPSendBundle.ino
     OSCBundle message_bundle;
 
@@ -391,11 +402,11 @@ void send_sensor_osc_message(scaleddata sensor_data, angledata angles){
     message_bundle.add("/gyr/x").add(sensor_data.GyX);
     message_bundle.add("/gyr/y").add(sensor_data.GyY);
     message_bundle.add("/gyr/z").add(sensor_data.GyZ);
-    message_bundle.add("/angl/x").add(angles.x);
-    message_bundle.add("/angl/y").add(angles.y);
-    message_bundle.add("/angl/z").add(angles.z);
+    message_bundle.add("/yawn").add(ypr_data.yawn);
+    message_bundle.add("/pitch").add(ypr_data.pitch);
+    message_bundle.add("/roll").add(ypr_data.roll);
 
-    if(false){
+    if(true){
       Serial.print(" SGyX = "); Serial.print((int32_t)sensor_data.GyX);
       Serial.print(" °/s| SGyY = "); Serial.print((int32_t)sensor_data.GyY);
       Serial.print(" °/s| SGyZ = "); Serial.print((int32_t)sensor_data.GyZ);
@@ -403,48 +414,32 @@ void send_sensor_osc_message(scaleddata sensor_data, angledata angles){
       Serial.print(" °C| SAcX = "); Serial.print((int32_t)sensor_data.AcX);
       Serial.print(" g| SAcY = "); Serial.print((int32_t)sensor_data.AcY);
       Serial.print(" g| SAcZ = "); Serial.print((int32_t)sensor_data.AcZ);
-      Serial.print(" g| AnglX = "); Serial.print(angles.x);
-      Serial.print(" °| AnglY = "); Serial.print(angles.y);
-      Serial.print(" °| AnglZ = "); Serial.print(angles.z); Serial.println("°");
+      Serial.print(" g| Yawn = "); Serial.print(ypr_data.yawn);
+      Serial.print(" °| Pitch = "); Serial.print(ypr_data.pitch);
+      Serial.print(" °| Roll = "); Serial.print(ypr_data.roll); Serial.println("°");
     }
-    Udp.beginPacket(outIp, outPort);
+    Udp.beginPacket(outIp, out_port);
     message_bundle.send(Udp); // send the bytes to the SLIP stream
     Udp.endPacket(); // mark the end of the OSC Packet
     message_bundle.empty(); // empty the bundle to free room for a new one
    
 }
 
-angledata acceleration_to_axis_angles(float ac_x, float ac_y, float ac_z){
-    float minVal=-8.0; float maxVal=8.0;
-    angledata angles;
-    float x;
-    float y;
-    float z;
+ypr compute_yawn_pitch_roll(scaleddata sensor_data){
+   //filter accelraion values
+   //fZg = Zg * alpha + (fZg * (1.0 - alpha));
+    ypr ypr_data;
 
-    float xAng = mapf(ac_x,minVal,maxVal,-90.0,90.0);
-    float yAng = mapf(ac_y,minVal,maxVal,-90.0,90.0);
-    float zAng = mapf(ac_z,minVal,maxVal,-90.0,90.0);
+   //Calcular los ángulos con acelerometro
+   float accel_ang_y = atan(-sensor_data.AcX / sqrt(pow(sensor_data.AcY, 2) + pow(sensor_data.AcZ, 2)))*(180.0 / PI);
+   float accel_ang_x = atan(sensor_data.AcY / sqrt(pow(sensor_data.AcX, 2) + pow(sensor_data.AcZ, 2)))*(180.0 / PI);
+   float accel_ang_z = atan (sensor_data.AcZ / sqrt(pow(sensor_data.AcX, 2) + pow(sensor_data.AcZ, 2)))*(180.0 / PI);
+   //Calcular angulo de rotación con giroscopio y filtro complementario
+   ypr_data.roll = alpha*(ypr_prev.roll + (sensor_data.GyX / 131)*dt) + (1-alpha)*accel_ang_x;
+   ypr_data.pitch  = alpha*(ypr_prev.pitch + (sensor_data.GyY / 131)*dt) + (1-alpha)*accel_ang_y;
+   ypr_data.yawn = alpha*(ypr_prev.roll + (sensor_data.GyZ / 131)*dt) + (1-alpha)*accel_ang_z;
+ 
+   ypr_prev = ypr_data;
 
-    x= RAD_TO_DEG * (atan2(-yAng, -zAng)+PI);
-    y= RAD_TO_DEG * (atan2(-xAng, -zAng)+PI);
-    z= RAD_TO_DEG * (atan2(-yAng, -xAng)+PI);
-    if (false){
-      Serial.print("ac_x: ");Serial.print(ac_x);
-      Serial.print(" ac_y: ");Serial.print(ac_y);
-      Serial.print(" ac_z: ");Serial.print(ac_z);
-      Serial.print(" xAng: ");Serial.print(xAng);
-      Serial.print(" yAng: ");Serial.print(yAng);
-      Serial.print(" zAng: ");Serial.print(zAng);
-      Serial.print(" x: ");Serial.print(x);
-      Serial.print(" y: ");Serial.print(y);
-      Serial.print(" z: ");Serial.println(z);
-    }
-
-    angles = {x,y,z};
-
-    return angles;
-}
-
-float mapf(float x, float in_min, float in_max, float out_min, float out_max){
-  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+   return ypr_data;
 }
